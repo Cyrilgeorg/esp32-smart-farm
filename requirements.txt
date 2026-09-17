@@ -3,5 +3,4 @@ uvicorn
 python-multipart
 gTTS
 SpeechRecognition
-huggingface-hub>=0.25.1
-gradio>=5.1.0
+huggingface_hub
