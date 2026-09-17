@@ -23,8 +23,8 @@ def read_root():
 @app.post("/chat")
 async def plant_chat(
     file: UploadFile = File(...),
-    temp: str = Form(default="غير معروفة"),
-    humidity: str = Form(default="غير معروفة")
+    temp: str = Form(default="25"),
+    humidity: str = Form(default="50")
 ):
     request_id = uuid.uuid4().hex
     input_path = f"temp_{request_id}.wav"
@@ -44,7 +44,6 @@ async def plant_chat(
         if os.path.exists(input_path):
             os.remove(input_path)
 
-    # تضمين درجة الحرارة والرطوبة المباشرة داخل تعليمات النظام
     system_instruction = (
         f"أنت نبتة نعناع ذكية تعيش في أصيص. "
         f"درجة الحرارة الحالية حولك هي {temp} درجة مئوية، ونسبة الرطوبة هي {humidity}%. "
@@ -62,7 +61,7 @@ async def plant_chat(
         ai_reply = response.choices[0].message.content.strip()
     except Exception as e:
         print(f"LLM Error: {e}")
-        ai_reply = f"حرارتي الحالية هي {temp} درجة مئوية."
+        ai_reply = f"درجة الحرارة الحالية لدي هي {temp} مئوية."
 
     output_audio_path = f"output_{request_id}.mp3"
     tts = gTTS(text=ai_reply, lang='ar')
