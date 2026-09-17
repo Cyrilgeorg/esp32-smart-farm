@@ -6,10 +6,8 @@ from fastapi.responses import FileResponse
 from huggingface_hub import InferenceClient
 from gtts import gTTS
 
-# 1. إنشاء تطبيق FastAPI الصافي
 app = FastAPI(title="Smart Plant API")
 
-# 2. إعداد مفتاح API لـ Hugging Face من البيئة (Render Environment Variables)
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 client = InferenceClient(
@@ -18,7 +16,8 @@ client = InferenceClient(
     api_key=HF_TOKEN,
 )
 
-@app.get("/")
+# إضافة دعم طلبات GET و HEAD معاً لمعالجة Render Health Check
+@app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
     return {"status": "running", "message": "Smart Plant API is ready!"}
 
