@@ -1,29 +1,32 @@
 import os
 import uuid
-import gradio as gr
 import speech_recognition as sr
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse
 from huggingface_hub import InferenceClient
 from gtts import gTTS
 
-fastapi_app = FastAPI(title="Smart Plant API")
+# 1. إنشاء تطبيق FastAPI الصافي
+app = FastAPI(title="Smart Plant API")
 
-# لازم تضيف HF_TOKEN كـ Secret في إعدادات الـ Space (Settings > Variables and secrets)
+# 2. إعداد مفتاح API لـ Hugging Face من البيئة (Render Environment Variables)
 HF_TOKEN = os.getenv("HF_TOKEN")
 
-# provider="auto" يخلي Hugging Face يختار مزود استضافة متاح للموديل تلقائيًا
-# عبر router.huggingface.co بدل الطريقة القديمة المتوقفة
 client = InferenceClient(
     model="Qwen/Qwen2.5-Coder-32B-Instruct",
     provider="auto",
     api_key=HF_TOKEN,
 )
 
-@fastapi_app.post("/chat")
+@app.get("/")
+def read_root():
+    return {"status": "running", "message": "Smart Plant API is ready!"}
+
+@app.post("/chat")
 async def plant_chat(file: UploadFile = File(...)):
     request_id = uuid.uuid4().hex
     input_path = f"temp_{request_id}.wav"
+    
     with open(input_path, "wb") as f:
         f.write(await file.read())
 
@@ -56,9 +59,3 @@ async def plant_chat(file: UploadFile = File(...)):
     tts.save(output_audio_path)
 
     return FileResponse(path=output_audio_path, media_type="audio/mpeg", filename="response.mp3")
-
-with gr.Blocks() as demo:
-    gr.Markdown("# 🌿 Smart Plant Voice Engine")
-    gr.Markdown("The API is running! Access Swagger docs at [/docs](/docs)")
-
-app = gr.mount_gradio_app(fastapi_app, demo, path="/")
