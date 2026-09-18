@@ -1,12 +1,22 @@
 import os
 import uuid
 import speech_recognition as sr
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from huggingface_hub import InferenceClient
 from gtts import gTTS
 
 app = FastAPI(title="Smart Plant API")
+
+# --- 1. تفعيل الـ CORS لمنع حظر الطلبات القادمة من ESP32 المتصلة بالشبكة المحلية ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],        # يسمح بالطلبات من جميع المصادر
+    allow_credentials=True,
+    allow_methods=["*"],        # يسمح بجميع أنواع الطلبات (GET, POST, OPTIONS...)
+    allow_headers=["*"],        # يسمح بكل أنواع الـ Headers
+)
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 
@@ -16,12 +26,18 @@ client = InferenceClient(
     api_key=HF_TOKEN,
 )
 
+# دالة لحذف الصوت بعد إرساله للمستخدم لتوفير المساحة
+def remove_file(path: str):
+    if os.path.exists(path):
+        os.remove(path)
+
 @app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
     return {"status": "running", "message": "Smart Plant API is ready!"}
 
 @app.post("/chat")
 async def plant_chat(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     temp: str = Form(default="25"),
     humidity: str = Form(default="50")
@@ -66,5 +82,8 @@ async def plant_chat(
     output_audio_path = f"output_{request_id}.mp3"
     tts = gTTS(text=ai_reply, lang='ar')
     tts.save(output_audio_path)
+
+    # حجز مهمة خلفية لحذف الملف الصوتي الناتج بعد الإرسال فوراً
+    background_tasks.add_task(remove_file, output_audio_path)
 
     return FileResponse(path=output_audio_path, media_type="audio/mpeg", filename="response.mp3")
