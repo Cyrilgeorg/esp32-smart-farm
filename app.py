@@ -38,12 +38,12 @@ app.add_middleware(
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 
+MODEL_NAME = "Qwen/Qwen3-8B"
+
 client = InferenceClient(
     provider="nscale",
     api_key=HF_TOKEN,
 )
-
-MODEL_NAME = "Qwen/Qwen3-8B"
 
 
 # =========================================================
@@ -118,25 +118,21 @@ def get_plant_state(
     # -----------------------------------------------------
 
     if soil_moisture <= 20:
-
         states.append(
             "تربتي جافة جداً وأنا عطشانة ومحتاجة مية"
         )
 
     elif soil_moisture <= 40:
-
         states.append(
             "بدأت أعطش شوية"
         )
 
     elif soil_moisture >= 85:
-
         states.append(
             "التربة مبلولة زيادة ومحتاجة نقلل الري"
         )
 
     else:
-
         states.append(
             "مستوى المية في التربة كويس"
         )
@@ -147,19 +143,16 @@ def get_plant_state(
     # -----------------------------------------------------
 
     if light <= 20:
-
         states.append(
             "المكان ضلمة ومحتاجة شوية ضوء"
         )
 
     elif light >= 90:
-
         states.append(
             "الضوء شديد عليّ شوية"
         )
 
     else:
-
         states.append(
             "الإضاءة مناسبة لي"
         )
@@ -170,13 +163,11 @@ def get_plant_state(
     # -----------------------------------------------------
 
     if salts >= 80:
-
         states.append(
             "الأملاح في التربة عالية ومضايقاني"
         )
 
     elif salts <= 10:
-
         states.append(
             "ممكن أحتاج شوية مغذيات"
         )
@@ -187,13 +178,11 @@ def get_plant_state(
     # -----------------------------------------------------
 
     if humidity >= 80:
-
         states.append(
             "الرطوبة عالية شوية"
         )
 
     elif humidity <= 25:
-
         states.append(
             "الجو جاف شوية"
         )
@@ -221,19 +210,12 @@ def read_root():
 
 @app.post("/chat")
 async def plant_chat(
-
     background_tasks: BackgroundTasks,
-
     file: UploadFile = File(...),
-
     temp: str = Form(default="25"),
-
     humidity: str = Form(default="50"),
-
     light: str = Form(default="50"),
-
     soil_moisture: str = Form(default="50"),
-
     salts: str = Form(default="30"),
 ):
 
@@ -244,7 +226,6 @@ async def plant_chat(
     request_id = uuid.uuid4().hex
 
     raw_path = f"temp_{request_id}_raw"
-
     wav_path = f"temp_{request_id}.wav"
 
 
@@ -312,7 +293,6 @@ async def plant_chat(
 
     user_text = None
 
-
     if converted_ok:
 
         try:
@@ -362,7 +342,6 @@ async def plant_chat(
     # =====================================================
 
     remove_file(raw_path)
-
     remove_file(wav_path)
 
 
@@ -408,7 +387,6 @@ async def plant_chat(
         salts_f
     )
 
-
     print(
         f"Plant State: {plant_state_description}"
     )
@@ -429,7 +407,7 @@ async def plant_chat(
 - كلامك بسيط وعفوي وطبيعي.
 - لا تتحدثي بأسلوب رسمي أو روبوتي.
 - لا تتحدثي مثل تقرير أو برنامج كمبيوتر.
-- لا تذكري الحساسات أو sensors أو الأرقام التقنية إلا إذا سُئلتِ عنها مباشرة.
+- لا تذكري الحساسات أو Sensors أو الأرقام التقنية إلا إذا سُئلتِ عنها مباشرة.
 - لا تستخدمي كلمات تقنية معقدة.
 - اجعلي الرد قصيراً، جملة أو جملتين فقط.
 - لا تعيدي سؤال المستخدم.
@@ -445,7 +423,6 @@ async def plant_chat(
 بالتعاون مع صندوق مكافحة ومناهضة العنف ضد المرأة.
 
 إذا سألك أحد:
-
 "مين إنتي؟"
 "عرفيني بنفسك"
 "احكيلي عن نفسك"
@@ -454,7 +431,6 @@ async def plant_chat(
 جاوبي بشكل لطيف ومختصر.
 
 مثال:
-
 "أنا نعناعة 🌿، نبتة نعناع ذكية بتحب تتكلم معاكي وتطمنك على حالتها."
 
 حالتك الحالية:
@@ -462,7 +438,6 @@ async def plant_chat(
 {plant_state_description}
 
 استخدمي حالة النبات فقط عندما يكون السؤال متعلقاً بـ:
-
 - صحتك
 - شعورك
 - احتياجاتك
@@ -544,17 +519,14 @@ async def plant_chat(
         # =================================================
 
         messages = [
-
             {
                 "role": "system",
                 "content": system_instruction
             },
-
             {
                 "role": "user",
                 "content": user_text
             }
-
         ]
 
 
@@ -567,6 +539,11 @@ async def plant_chat(
             print(
                 f"Sending request to {MODEL_NAME}..."
             )
+
+            print(
+                f"User said: {user_text}"
+            )
+
 
             response = client.chat.completions.create(
 
@@ -583,16 +560,106 @@ async def plant_chat(
 
 
             # =================================================
-            # Get AI Reply
+            # Debug Raw Response
             # =================================================
 
-            ai_reply = (
-                response
-                .choices[0]
-                .message
-                .content
-                .strip()
+            print(
+                "========== LLM RAW RESPONSE =========="
             )
+
+            print(
+                response
+            )
+
+            print(
+                "======================================="
+            )
+
+
+            # =================================================
+            # Get Message Safely
+            # =================================================
+
+            if not response.choices:
+
+                print(
+                    "LLM returned no choices"
+                )
+
+                ai_reply = (
+                    "معلش 🌿، مش عارفة أرد عليكي دلوقتي. "
+                    "ممكن تقوليلي تاني؟"
+                )
+
+            else:
+
+                message = response.choices[0].message
+
+                print(
+                    "========== MESSAGE =========="
+                )
+
+                print(
+                    message
+                )
+
+                print(
+                    "============================="
+                )
+
+
+                # =================================================
+                # Get Content Safely
+                # =================================================
+
+                content = getattr(
+                    message,
+                    "content",
+                    None
+                )
+
+                print(
+                    f"CONTENT: {repr(content)}"
+                )
+
+
+                if content is not None and str(content).strip():
+
+                    ai_reply = str(content).strip()
+
+
+                else:
+
+                    # =================================================
+                    # Try Reasoning
+                    # =================================================
+
+                    reasoning = getattr(
+                        message,
+                        "reasoning",
+                        None
+                    )
+
+                    print(
+                        f"REASONING: {repr(reasoning)}"
+                    )
+
+
+                    if (
+                        reasoning is not None
+                        and str(reasoning).strip()
+                    ):
+
+                        ai_reply = str(
+                            reasoning
+                        ).strip()
+
+                    else:
+
+                        ai_reply = (
+                            "معلش 🌿، مش عارفة أرد عليكي دلوقتي. "
+                            "ممكن تقوليلي تاني؟"
+                        )
 
 
             print(
@@ -620,26 +687,24 @@ async def plant_chat(
         f"output_{request_id}.mp3"
     )
 
-
     try:
 
-        tts = gTTS(
-
-            text=ai_reply,
-
-            lang="ar"
+        print(
+            f"TTS Text: {ai_reply}"
         )
 
+        tts = gTTS(
+            text=ai_reply,
+            lang="ar"
+        )
 
         tts.save(
             output_audio_path
         )
 
-
         print(
             "TTS generation successful"
         )
-
 
     except Exception as e:
 
@@ -657,9 +722,7 @@ async def plant_chat(
     # =====================================================
 
     background_tasks.add_task(
-
         remove_file,
-
         output_audio_path
     )
 
@@ -669,10 +732,7 @@ async def plant_chat(
     # =====================================================
 
     return FileResponse(
-
         path=output_audio_path,
-
         media_type="audio/mpeg",
-
         filename="response.mp3"
     )
