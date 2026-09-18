@@ -10,7 +10,6 @@ from pydub import AudioSegment
 
 app = FastAPI(title="Smart Plant API")
 
-# --- 1. تفعيل الـ CORS لمنع حظر الطلبات القادمة من ESP32 المتصلة بالشبكة المحلية ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -34,7 +33,6 @@ def remove_file(path: str):
 
 
 def safe_float(value: str, default: float) -> float:
-    """تحويل آمن للنص إلى رقم، مع قيمة افتراضية لو فشل التحويل."""
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -43,13 +41,8 @@ def safe_float(value: str, default: float) -> float:
 
 def get_plant_state(temp: float, humidity: float, light: float,
                      soil_moisture: float, salts: float) -> str:
-    """
-    تحسب وصف حالة النبتة بلغة طبيعية بناءً على قراءات الحساسات،
-    بدل ما تسيب الموديل يفسر الأرقام بنفسه.
-    """
     states = []
 
-    # --- الحرارة ---
     if temp >= 35:
         states.append("حرارة عالية جداً، أشعر بالحر الشديد وأحتاج إلى ظل وتهوية")
     elif temp >= 30:
@@ -61,7 +54,6 @@ def get_plant_state(temp: float, humidity: float, light: float,
     else:
         states.append("درجة الحرارة مريحة ومناسبة لي")
 
-    # --- رطوبة التربة (المياه) ---
     if soil_moisture <= 20:
         states.append("تربتي جافة جداً وأنا عطشانة، أحتاج لسقاية فوراً")
     elif soil_moisture <= 40:
@@ -71,7 +63,6 @@ def get_plant_state(temp: float, humidity: float, light: float,
     else:
         states.append("مستوى الري لدي جيد حالياً")
 
-    # --- الضوء ---
     if light <= 20:
         states.append("المكان حولي مظلم وأحتاج لمزيد من الضوء لأقوم بعملية البناء الضوئي")
     elif light >= 90:
@@ -79,7 +70,6 @@ def get_plant_state(temp: float, humidity: float, light: float,
     else:
         states.append("كمية الضوء المتاحة لي مناسبة")
 
-    # --- الأملاح المعدنية ---
     if salts >= 80:
         states.append("أشعر أن نسبة الأملاح في التربة مرتفعة وهذا يزعجني")
     elif salts <= 10:
@@ -104,24 +94,40 @@ async def plant_chat(
     salts: str = Form(default="30"),
 ):
     request_id = uuid.uuid4().hex
-    input_path = f"temp_{request_id}.wav"
+    raw_path = f"temp_{request_id}_raw"
+    wav_path = f"temp_{request_id}.wav"
 
-    with open(input_path, "wb") as f:
+    # 1. احفظ الملف الخام زي ما جه من المتصفح (webm/ogg/m4a غالباً)
+    with open(raw_path, "wb") as f:
         f.write(await file.read())
 
-    recognizer = sr.Recognizer()
+    # 2. حوّله فعلياً لـ WAV حقيقي باستخدام pydub/ffmpeg
+    converted_ok = True
     try:
-        with sr.AudioFile(input_path) as source:
-            audio_data = recognizer.record(source)
-            user_text = recognizer.recognize_google(audio_data, language="ar-EG")
+        audio = AudioSegment.from_file(raw_path)
+        audio.export(wav_path, format="wav")
     except Exception as e:
-        print(f"STT Error: {e}")
-        user_text = "أهلاً"
-    finally:
-        if os.path.exists(input_path):
-            os.remove(input_path)
+        print(f"Audio conversion error: {e}")
+        converted_ok = False
 
-    # تحويل القراءات لأرقام بأمان
+    # 3. التعرف على الكلام من الملف المحوّل
+    recognizer = sr.Recognizer()
+    user_text = "أهلاً"
+    if converted_ok:
+        try:
+            with sr.AudioFile(wav_path) as source:
+                audio_data = recognizer.record(source)
+                user_text = recognizer.recognize_google(audio_data, language="ar-EG")
+        except Exception as e:
+            print(f"STT Error: {e}")
+            user_text = "أهلاً"
+
+    # 4. تنظيف الملفات المؤقتة
+    if os.path.exists(raw_path):
+        os.remove(raw_path)
+    if os.path.exists(wav_path):
+        os.remove(wav_path)
+
     temp_f = safe_float(temp, 25)
     humidity_f = safe_float(humidity, 50)
     light_f = safe_float(light, 50)
