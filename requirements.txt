@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 python-multipart
-gTTS
 SpeechRecognition
-huggingface_hub
 pydub
+gTTS
+huggingface_hub
