@@ -21,11 +21,10 @@ app.add_middleware(
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 client = InferenceClient(
-    model="Qwen/Qwen2.5-7B-Instruct",
+    model="Qwen/Qwen2.5-Coder-32B-Instruct",
     provider="auto",
     api_key=HF_TOKEN,
 )
-
 
 def remove_file(path: str):
     if os.path.exists(path):
