@@ -21,7 +21,7 @@ app.add_middleware(
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 client = InferenceClient(
-    model="Qwen/Qwen2.5-Coder-32B-Instruct",
+    model="meta-llama/Llama-3.2-3B-Instruct",
     provider="auto",
     api_key=HF_TOKEN,
 )
