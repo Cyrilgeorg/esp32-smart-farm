@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from huggingface_hub import InferenceClient
 from gtts import gTTS
+from pydub import AudioSegment
 
 app = FastAPI(title="Smart Plant API")
 
