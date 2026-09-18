@@ -4,3 +4,4 @@ python-multipart
 gTTS
 SpeechRecognition
 huggingface_hub
+pydub
