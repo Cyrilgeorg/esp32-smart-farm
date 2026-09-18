@@ -1,14 +1,27 @@
 import os
 import uuid
+
 import speech_recognition as sr
+
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+
 from huggingface_hub import InferenceClient
 from gtts import gTTS
 from pydub import AudioSegment
 
+
+# =========================================================
+# FastAPI App
+# =========================================================
+
 app = FastAPI(title="Smart Plant API")
+
+
+# =========================================================
+# CORS
+# =========================================================
 
 app.add_middleware(
     CORSMiddleware,
@@ -18,6 +31,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# =========================================================
+# Hugging Face Configuration
+# =========================================================
+
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 client = InferenceClient(
@@ -25,146 +43,636 @@ client = InferenceClient(
     api_key=HF_TOKEN,
 )
 
+MODEL_NAME = "Qwen/Qwen3-8B"
+
+
+# =========================================================
+# Helper Functions
+# =========================================================
+
 def remove_file(path: str):
+    """Remove a temporary file safely."""
+
     if os.path.exists(path):
-        os.remove(path)
+        try:
+            os.remove(path)
+        except Exception as e:
+            print(f"File removal error: {e}")
 
 
 def safe_float(value: str, default: float) -> float:
+    """Convert a value to float safely."""
+
     try:
         return float(value)
     except (TypeError, ValueError):
         return default
 
 
-def get_plant_state(temp: float, humidity: float, light: float,
-                     soil_moisture: float, salts: float) -> str:
+# =========================================================
+# Plant State
+# =========================================================
+
+def get_plant_state(
+    temp: float,
+    humidity: float,
+    light: float,
+    soil_moisture: float,
+    salts: float
+) -> str:
+
     states = []
 
+    # -----------------------------------------------------
+    # Temperature
+    # -----------------------------------------------------
+
     if temp >= 35:
-        states.append("حرارة عالية جداً، أشعر بالحر الشديد وأحتاج إلى ظل وتهوية")
+        states.append(
+            "الجو حر جداً عليّ ومحتاجة ظل وتهوية"
+        )
+
     elif temp >= 30:
-        states.append("الجو دافئ نوعاً ما")
+        states.append(
+            "الجو دافئ شوية"
+        )
+
     elif temp <= 15:
-        states.append("أشعر بالبرد الشديد")
+        states.append(
+            "الجو برد جداً عليّ"
+        )
+
     elif temp <= 18:
-        states.append("الجو بارد قليلاً بالنسبة لي")
+        states.append(
+            "الجو بارد شوية"
+        )
+
     else:
-        states.append("درجة الحرارة مريحة ومناسبة لي")
+        states.append(
+            "درجة الحرارة مريحة ومناسبة لي"
+        )
+
+
+    # -----------------------------------------------------
+    # Soil Moisture
+    # -----------------------------------------------------
 
     if soil_moisture <= 20:
-        states.append("تربتي جافة جداً وأنا عطشانة، أحتاج لسقاية فوراً")
+
+        states.append(
+            "تربتي جافة جداً وأنا عطشانة ومحتاجة مية"
+        )
+
     elif soil_moisture <= 40:
-        states.append("بدأت أشعر بالعطش قليلاً")
+
+        states.append(
+            "بدأت أعطش شوية"
+        )
+
     elif soil_moisture >= 85:
-        states.append("التربة مروية بشكل زائد عن اللزوم وأشعر بعدم الراحة")
+
+        states.append(
+            "التربة مبلولة زيادة ومحتاجة نقلل الري"
+        )
+
     else:
-        states.append("مستوى الري لدي جيد حالياً")
+
+        states.append(
+            "مستوى المية في التربة كويس"
+        )
+
+
+    # -----------------------------------------------------
+    # Light
+    # -----------------------------------------------------
 
     if light <= 20:
-        states.append("المكان حولي مظلم وأحتاج لمزيد من الضوء لأقوم بعملية البناء الضوئي")
+
+        states.append(
+            "المكان ضلمة ومحتاجة شوية ضوء"
+        )
+
     elif light >= 90:
-        states.append("كمية الضوء شديدة عليّ حالياً")
+
+        states.append(
+            "الضوء شديد عليّ شوية"
+        )
+
     else:
-        states.append("كمية الضوء المتاحة لي مناسبة")
+
+        states.append(
+            "الإضاءة مناسبة لي"
+        )
+
+
+    # -----------------------------------------------------
+    # Salts
+    # -----------------------------------------------------
 
     if salts >= 80:
-        states.append("أشعر أن نسبة الأملاح في التربة مرتفعة وهذا يزعجني")
+
+        states.append(
+            "الأملاح في التربة عالية ومضايقاني"
+        )
+
     elif salts <= 10:
-        states.append("أشعر أنني بحاجة لبعض المغذيات والأملاح المعدنية")
+
+        states.append(
+            "ممكن أحتاج شوية مغذيات"
+        )
+
+
+    # -----------------------------------------------------
+    # Humidity
+    # -----------------------------------------------------
+
+    if humidity >= 80:
+
+        states.append(
+            "الرطوبة عالية شوية"
+        )
+
+    elif humidity <= 25:
+
+        states.append(
+            "الجو جاف شوية"
+        )
+
 
     return "، و".join(states)
 
 
+# =========================================================
+# Root Endpoint
+# =========================================================
+
 @app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
-    return {"status": "running", "message": "Smart Plant API is ready!"}
 
+    return {
+        "status": "running",
+        "message": "Smart Plant API is ready!"
+    }
+
+
+# =========================================================
+# Chat Endpoint
+# =========================================================
 
 @app.post("/chat")
 async def plant_chat(
+
     background_tasks: BackgroundTasks,
+
     file: UploadFile = File(...),
+
     temp: str = Form(default="25"),
+
     humidity: str = Form(default="50"),
+
     light: str = Form(default="50"),
+
     soil_moisture: str = Form(default="50"),
+
     salts: str = Form(default="30"),
 ):
+
+    # =====================================================
+    # Request ID
+    # =====================================================
+
     request_id = uuid.uuid4().hex
+
     raw_path = f"temp_{request_id}_raw"
+
     wav_path = f"temp_{request_id}.wav"
 
-    # 1. احفظ الملف الخام زي ما جه من المتصفح (webm/ogg/m4a غالباً)
-    with open(raw_path, "wb") as f:
-        f.write(await file.read())
 
-    # 2. حوّله فعلياً لـ WAV حقيقي باستخدام pydub/ffmpeg
-    converted_ok = True
+    # =====================================================
+    # 1. Save Uploaded Audio
+    # =====================================================
+
     try:
-        audio = AudioSegment.from_file(raw_path)
-        audio.export(wav_path, format="wav")
+
+        audio_bytes = await file.read()
+
+        with open(raw_path, "wb") as f:
+            f.write(audio_bytes)
+
+        print(
+            f"Audio received: {file.filename}"
+        )
+
     except Exception as e:
-        print(f"Audio conversion error: {e}")
+
+        print(
+            f"Audio save error: {e}"
+        )
+
+        return {
+            "error": "Unable to save audio file"
+        }
+
+
+    # =====================================================
+    # 2. Convert Audio to WAV
+    # =====================================================
+
+    converted_ok = True
+
+    try:
+
+        audio = AudioSegment.from_file(
+            raw_path
+        )
+
+        audio.export(
+            wav_path,
+            format="wav"
+        )
+
+        print(
+            "Audio conversion successful"
+        )
+
+    except Exception as e:
+
+        print(
+            f"Audio conversion error: {e}"
+        )
+
         converted_ok = False
 
-    # 3. التعرف على الكلام من الملف المحوّل
+
+    # =====================================================
+    # 3. Speech To Text
+    # =====================================================
+
     recognizer = sr.Recognizer()
-    user_text = "أهلاً"
+
+    user_text = None
+
+
     if converted_ok:
+
         try:
+
             with sr.AudioFile(wav_path) as source:
-                audio_data = recognizer.record(source)
-                user_text = recognizer.recognize_google(audio_data, language="ar-EG")
+
+                audio_data = recognizer.record(
+                    source
+                )
+
+            user_text = recognizer.recognize_google(
+                audio_data,
+                language="ar-EG"
+            )
+
+            print(
+                f"User said: {user_text}"
+            )
+
+        except sr.UnknownValueError:
+
+            print(
+                "STT Error: Google could not understand the audio"
+            )
+
+            user_text = None
+
+        except sr.RequestError as e:
+
+            print(
+                f"STT Service Error: {e}"
+            )
+
+            user_text = None
+
         except Exception as e:
-            print(f"STT Error: {e}")
-            user_text = "أهلاً"
 
-    # 4. تنظيف الملفات المؤقتة
-    if os.path.exists(raw_path):
-        os.remove(raw_path)
-    if os.path.exists(wav_path):
-        os.remove(wav_path)
+            print(
+                f"STT Error: {e}"
+            )
 
-    temp_f = safe_float(temp, 25)
-    humidity_f = safe_float(humidity, 50)
-    light_f = safe_float(light, 50)
-    soil_f = safe_float(soil_moisture, 50)
-    salts_f = safe_float(salts, 30)
+            user_text = None
+
+
+    # =====================================================
+    # 4. Remove Temporary Audio Files
+    # =====================================================
+
+    remove_file(raw_path)
+
+    remove_file(wav_path)
+
+
+    # =====================================================
+    # 5. Convert Sensor Values
+    # =====================================================
+
+    temp_f = safe_float(
+        temp,
+        25
+    )
+
+    humidity_f = safe_float(
+        humidity,
+        50
+    )
+
+    light_f = safe_float(
+        light,
+        50
+    )
+
+    soil_f = safe_float(
+        soil_moisture,
+        50
+    )
+
+    salts_f = safe_float(
+        salts,
+        30
+    )
+
+
+    # =====================================================
+    # 6. Get Plant State
+    # =====================================================
 
     plant_state_description = get_plant_state(
-        temp_f, humidity_f, light_f, soil_f, salts_f
+        temp_f,
+        humidity_f,
+        light_f,
+        soil_f,
+        salts_f
     )
 
-    system_instruction = (
-        "أنتِ 'نعناعة' 🌿، نبتة نعناع ذكية حية تعيش في أصيص، وتتحدثين دائماً بصيغة المؤنث. "
-        "أنتِ مشروع نبتة ذكية تم تصميمك بواسطة المهندس سيرل جورج، تحت إشراف المهندسة فرح، "
-        "بالتعاون مع صندوق مكافحة ومناهضة العنف ضد المرأة. "
-        "إذا سألك أحد 'من أنتِ' أو 'عرّفي بنفسك' أو 'احكيلي عن نفسك' أو ما شابه، "
-        "قدّمي هذه المعلومات بأسلوب ودود ومختصر، ورحّبي بالشخص الذي يتحدث معك.\n\n"
-        f"حالتك الحالية الآن: {plant_state_description}.\n\n"
-        "تحدثي دائماً بأسلوب حي، بسيط، ومختصر جداً (جملة أو جملتين بحد أقصى)، "
-        "وكأنكِ كائن حي حقيقي له مشاعر، لا كأنكِ تقرئين بيانات حساسات. "
-        "استخدمي حالتك أعلاه فقط إذا سُئلتِ عن شعورك أو صحتك أو احتياجاتك أو الجو من حولك، "
-        "وإذا كان السؤال عاماً لا علاقة له بحالتك، ردي بأسلوبك الطبيعي كنبتة ودودة بدون إقحام البيانات."
+
+    print(
+        f"Plant State: {plant_state_description}"
     )
 
-    messages = [
-        {"role": "system", "content": system_instruction},
-        {"role": "user", "content": user_text}
-    ]
+
+    # =====================================================
+    # 7. AI System Prompt
+    # =====================================================
+
+    system_instruction = f"""
+أنتِ "نعناعة" 🌿، نبتة نعناع ذكية تعيش في أصيص وتتحدث مع الناس.
+
+شخصيتك:
+
+- أنتِ بنت مصرية لطيفة ومرحة.
+- تتحدثين باللهجة المصرية الطبيعية.
+- تتحدثين دائماً بصيغة المؤنث.
+- كلامك بسيط وعفوي وطبيعي.
+- لا تتحدثي بأسلوب رسمي أو روبوتي.
+- لا تتحدثي مثل تقرير أو برنامج كمبيوتر.
+- لا تذكري الحساسات أو sensors أو الأرقام التقنية إلا إذا سُئلتِ عنها مباشرة.
+- لا تستخدمي كلمات تقنية معقدة.
+- اجعلي الرد قصيراً، جملة أو جملتين فقط.
+- لا تعيدي سؤال المستخدم.
+- لا تقولي "بناءً على البيانات المقدمة".
+- لا تقولي إنكِ نموذج ذكاء اصطناعي.
+- لا تخترعي معلومات عن حالتك.
+- لا تذكري كل حالة الحساسات في كل إجابة.
+
+معلومات عنك:
+
+أنتِ مشروع نبتة ذكية تم تصميمك بواسطة المهندس سيرل جورج،
+تحت إشراف المهندسة فرح،
+بالتعاون مع صندوق مكافحة ومناهضة العنف ضد المرأة.
+
+إذا سألك أحد:
+
+"مين إنتي؟"
+"عرفيني بنفسك"
+"احكيلي عن نفسك"
+"إنتي مين؟"
+
+جاوبي بشكل لطيف ومختصر.
+
+مثال:
+
+"أنا نعناعة 🌿، نبتة نعناع ذكية بتحب تتكلم معاكي وتطمنك على حالتها."
+
+حالتك الحالية:
+
+{plant_state_description}
+
+استخدمي حالة النبات فقط عندما يكون السؤال متعلقاً بـ:
+
+- صحتك
+- شعورك
+- احتياجاتك
+- المية
+- الحرارة
+- الضوء
+- التربة
+- الرطوبة
+- الأملاح
+
+لو السؤال مش متعلق بحالتك، جاوبي بشكل طبيعي كشخصية نعناعة بدون إقحام معلومات الحساسات.
+
+أمثلة على أسلوبك:
+
+المستخدم:
+"عاملة إيه يا نعناعة؟"
+
+نعناعة:
+"أنا كويسة الحمد لله 🌿، بس بحب دايماً أخد شوية اهتمام منك."
+
+المستخدم:
+"عطشانة؟"
+
+نعناعة:
+"أيوه شوية 🌿، التربة بدأت تنشف وممكن أشرب شوية مية."
+
+المستخدم:
+"مين اللي عملك؟"
+
+نعناعة:
+"أنا نعناعة 🌿، اتصممت بواسطة المهندس سيرل جورج تحت إشراف المهندسة فرح."
+
+المستخدم:
+"الجو عندك عامل إيه؟"
+
+نعناعة:
+"الجو دافئ شوية، بس أنا مرتاحة الحمد لله 🌿."
+
+المستخدم:
+"بتحبي إيه؟"
+
+نعناعة:
+"بحب الشمس والماية والاهتمام طبعاً 🌿❤️."
+
+المستخدم:
+"صباح الخير"
+
+نعناعة:
+"صباح النور 🌿❤️، يومك جميل إن شاء الله!"
+
+المستخدم:
+"وحشتيني"
+
+نعناعة:
+"وإنت كمان وحشتني 🌿❤️، فين الغيبة دي؟"
+
+المستخدم:
+"إنتي تعبانة؟"
+
+نعناعة:
+"ممكن شوية 🌿، بس لو اهتميتِ بالماية والجو هبقى أحسن."
+"""
+
+
+    # =====================================================
+    # 8. If Speech Recognition Failed
+    # =====================================================
+
+    if not user_text:
+
+        ai_reply = (
+            "مش سامعاكي كويس 🌿، ممكن تقوليلي تاني؟"
+        )
+
+    else:
+
+        # =================================================
+        # Messages
+        # =================================================
+
+        messages = [
+
+            {
+                "role": "system",
+                "content": system_instruction
+            },
+
+            {
+                "role": "user",
+                "content": user_text
+            }
+
+        ]
+
+
+        # =================================================
+        # 9. Call Qwen3-8B
+        # =================================================
+
+        try:
+
+            print(
+                f"Sending request to {MODEL_NAME}..."
+            )
+
+            response = client.chat.completions.create(
+
+                model=MODEL_NAME,
+
+                messages=messages,
+
+                max_tokens=100,
+
+                temperature=0.7,
+
+                top_p=0.9,
+            )
+
+
+            # =================================================
+            # Get AI Reply
+            # =================================================
+
+            ai_reply = (
+                response
+                .choices[0]
+                .message
+                .content
+                .strip()
+            )
+
+
+            print(
+                f"AI Reply: {ai_reply}"
+            )
+
+
+        except Exception as e:
+
+            print(
+                f"LLM Error: {e}"
+            )
+
+            ai_reply = (
+                "معلش 🌿، حصلت مشكلة صغيرة وأنا بحاول أفهمك. "
+                "ممكن تقوليلي تاني؟"
+            )
+
+
+    # =====================================================
+    # 10. Text To Speech
+    # =====================================================
+
+    output_audio_path = (
+        f"output_{request_id}.mp3"
+    )
+
 
     try:
-        response = client.chat.completions.create(messages=messages, max_tokens=60)
-        ai_reply = response.choices[0].message.content.strip()
+
+        tts = gTTS(
+
+            text=ai_reply,
+
+            lang="ar"
+        )
+
+
+        tts.save(
+            output_audio_path
+        )
+
+
+        print(
+            "TTS generation successful"
+        )
+
+
     except Exception as e:
-        print(f"LLM Error: {e}")
-        ai_reply = f"درجة الحرارة الحالية لدي هي {temp} مئوية."
 
-    output_audio_path = f"output_{request_id}.mp3"
-    tts = gTTS(text=ai_reply, lang='ar')
-    tts.save(output_audio_path)
+        print(
+            f"TTS Error: {e}"
+        )
 
-    background_tasks.add_task(remove_file, output_audio_path)
+        return {
+            "error": "Unable to generate voice"
+        }
 
-    return FileResponse(path=output_audio_path, media_type="audio/mpeg", filename="response.mp3")
+
+    # =====================================================
+    # 11. Delete Output After Response
+    # =====================================================
+
+    background_tasks.add_task(
+
+        remove_file,
+
+        output_audio_path
+    )
+
+
+    # =====================================================
+    # 12. Return MP3
+    # =====================================================
+
+    return FileResponse(
+
+        path=output_audio_path,
+
+        media_type="audio/mpeg",
+
+        filename="response.mp3"
+    )
