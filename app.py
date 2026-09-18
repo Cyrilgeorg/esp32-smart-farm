@@ -250,6 +250,8 @@ async def plant_chat(
             f"Audio save error: {e}"
         )
 
+        remove_file(raw_path)
+
         return {
             "error": "Unable to save audio file"
         }
@@ -299,6 +301,12 @@ async def plant_chat(
 
             with sr.AudioFile(wav_path) as source:
 
+                # Give Google a little room to detect speech
+                recognizer.adjust_for_ambient_noise(
+                    source,
+                    duration=0.3
+                )
+
                 audio_data = recognizer.record(
                     source
                 )
@@ -307,6 +315,8 @@ async def plant_chat(
                 audio_data,
                 language="ar-EG"
             )
+
+            user_text = user_text.strip()
 
             print(
                 f"User said: {user_text}"
@@ -338,7 +348,7 @@ async def plant_chat(
 
 
     # =====================================================
-    # 4. Remove Temporary Audio Files
+    # 4. Remove Temporary Input Audio
     # =====================================================
 
     remove_file(raw_path)
@@ -407,14 +417,14 @@ async def plant_chat(
 - كلامك بسيط وعفوي وطبيعي.
 - لا تتحدثي بأسلوب رسمي أو روبوتي.
 - لا تتحدثي مثل تقرير أو برنامج كمبيوتر.
-- لا تذكري الحساسات أو Sensors أو الأرقام التقنية إلا إذا سُئلتِ عنها مباشرة.
+- لا تذكري الحساسات أو Sensors إلا إذا سُئلتِ عنها مباشرة.
 - لا تستخدمي كلمات تقنية معقدة.
-- اجعلي الرد قصيراً، جملة أو جملتين فقط.
+- الرد يكون قصيراً جداً، جملة أو جملتين فقط.
+- لا تذكري كل بيانات النبات في كل إجابة.
 - لا تعيدي سؤال المستخدم.
 - لا تقولي "بناءً على البيانات المقدمة".
 - لا تقولي إنكِ نموذج ذكاء اصطناعي.
 - لا تخترعي معلومات عن حالتك.
-- لا تذكري كل حالة الحساسات في كل إجابة.
 
 معلومات عنك:
 
@@ -448,9 +458,9 @@ async def plant_chat(
 - الرطوبة
 - الأملاح
 
-لو السؤال مش متعلق بحالتك، جاوبي بشكل طبيعي كشخصية نعناعة بدون إقحام معلومات الحساسات.
+لو السؤال مش متعلق بحالتك، جاوبي بشكل طبيعي كشخصية نعناعة.
 
-أمثلة على أسلوبك:
+أمثلة:
 
 المستخدم:
 "عاملة إيه يا نعناعة؟"
@@ -514,103 +524,57 @@ async def plant_chat(
 
     else:
 
-        # =====================================================
-# Messages
-# =====================================================
+        # =================================================
+        # Messages
+        # =================================================
 
-messages = [
-    {
-        "role": "system",
-        "content": system_instruction
-    },
-    {
-        "role": "user",
-        "content": f"{user_text}\n\n/no_think"
-    }
-]
+        messages = [
+            {
+                "role": "system",
+                "content": system_instruction
+            },
+            {
+                "role": "user",
+                "content": f"{user_text}\n\n/no_think"
+            }
+        ]
 
 
-# =====================================================
-# Call Qwen3-8B
-# =====================================================
+        # =================================================
+        # 9. Call Qwen3-8B
+        # =================================================
 
-try:
-
-    print(f"Sending request to {MODEL_NAME}...")
-    print(f"User said: {user_text}")
-
-    response = client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=messages,
-        max_tokens=180,
-        temperature=0.7,
-        top_p=0.8,
-    )
-
-    print("========== LLM RAW RESPONSE ==========")
-    print(response)
-    print("=======================================")
-
-    if not response.choices:
-
-        print("LLM returned no choices")
-
-        ai_reply = (
-            "معلش 🌿، مش عارفة أرد عليكي دلوقتي. "
-            "ممكن تقوليلي تاني؟"
-        )
-
-    else:
-
-        message = response.choices[0].message
-
-        content = getattr(
-            message,
-            "content",
-            None
-        )
-
-        reasoning_content = getattr(
-            message,
-            "reasoning_content",
-            None
-        )
-
-        print(f"CONTENT: {repr(content)}")
-        print(f"REASONING CONTENT: {repr(reasoning_content)}")
-
-        if content is not None and str(content).strip():
-
-            ai_reply = str(content).strip()
-
-        else:
+        try:
 
             print(
-                "The model did not return a final answer."
+                f"Sending request to {MODEL_NAME}..."
             )
 
-            ai_reply = (
-                "معلش 🌿، ممكن تقوليلي تاني؟"
+            print(
+                f"User said: {user_text}"
             )
 
-    print(f"AI Reply: {ai_reply}")
 
+            response = client.chat.completions.create(
 
-except Exception as e:
+                model=MODEL_NAME,
 
-    print(f"LLM Error: {e}")
+                messages=messages,
 
-    ai_reply = (
-        "معلش 🌿، حصلت مشكلة صغيرة وأنا بحاول أفهمك. "
-        "ممكن تقوليلي تاني؟"
-    )
+                max_tokens=180,
+
+                temperature=0.7,
+
+                top_p=0.8,
+            )
+
 
             # =================================================
-            # Debug Raw Response
+            # Debug Response
             # =================================================
 
             print(
-                "========== LLM RAW RESPONSE =========="
+                "========== LLM RESPONSE =========="
             )
 
             print(
@@ -618,12 +582,12 @@ except Exception as e:
             )
 
             print(
-                "======================================="
+                "==================================="
             )
 
 
             # =================================================
-            # Get Message Safely
+            # Check Choices
             # =================================================
 
             if not response.choices:
@@ -641,71 +605,81 @@ except Exception as e:
 
                 message = response.choices[0].message
 
-                print(
-                    "========== MESSAGE =========="
-                )
-
-                print(
-                    message
-                )
-
-                print(
-                    "============================="
-                )
-
-
-                # =================================================
-                # Get Content Safely
-                # =================================================
-
                 content = getattr(
                     message,
                     "content",
                     None
                 )
 
+                reasoning_content = getattr(
+                    message,
+                    "reasoning_content",
+                    None
+                )
+
+                finish_reason = getattr(
+                    response.choices[0],
+                    "finish_reason",
+                    None
+                )
+
+
+                print(
+                    f"Finish reason: {finish_reason}"
+                )
+
                 print(
                     f"CONTENT: {repr(content)}"
                 )
 
-
-                if content is not None and str(content).strip():
-
-                    ai_reply = str(content).strip()
-
-
-                else:
-
-                    # =================================================
-                    # Try Reasoning
-                    # =================================================
-
-                    reasoning = getattr(
-                        message,
-                        "reasoning",
-                        None
-                    )
-
-                    print(
-                        f"REASONING: {repr(reasoning)}"
-                    )
+                print(
+                    f"REASONING CONTENT: {repr(reasoning_content)}"
+                )
 
 
-                    if (
-                        reasoning is not None
-                        and str(reasoning).strip()
-                    ):
+                # =================================================
+                # Final Answer
+                # =================================================
 
-                        ai_reply = str(
-                            reasoning
-                        ).strip()
+                if content is not None:
+
+                    cleaned_content = str(
+                        content
+                    ).strip()
+
+                    if cleaned_content:
+
+                        ai_reply = cleaned_content
 
                     else:
 
                         ai_reply = (
-                            "معلش 🌿، مش عارفة أرد عليكي دلوقتي. "
-                            "ممكن تقوليلي تاني؟"
+                            "معلش 🌿، ممكن تقوليلي تاني؟"
                         )
+
+
+                else:
+
+                    # Do NOT use reasoning_content as the answer.
+                    # It contains the model's internal reasoning,
+                    # not the final response.
+
+                    print(
+                        "No final content returned by model."
+                    )
+
+                    ai_reply = (
+                        "معلش 🌿، ممكن تقوليلي تاني؟"
+                    )
+
+
+            # =================================================
+            # Limit Extremely Long Replies
+            # =================================================
+
+            if len(ai_reply) > 500:
+
+                ai_reply = ai_reply[:500].strip()
 
 
             print(
@@ -757,6 +731,8 @@ except Exception as e:
         print(
             f"TTS Error: {e}"
         )
+
+        remove_file(output_audio_path)
 
         return {
             "error": "Unable to generate voice"
