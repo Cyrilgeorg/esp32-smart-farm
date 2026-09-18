@@ -514,50 +514,96 @@ async def plant_chat(
 
     else:
 
-        # =================================================
-        # Messages
-        # =================================================
+        # =====================================================
+# Messages
+# =====================================================
 
-        messages = [
-            {
-                "role": "system",
-                "content": system_instruction
-            },
-            {
-                "role": "user",
-                "content": user_text
-            }
-        ]
+messages = [
+    {
+        "role": "system",
+        "content": system_instruction
+    },
+    {
+        "role": "user",
+        "content": f"{user_text}\n\n/no_think"
+    }
+]
 
 
-        # =================================================
-        # 9. Call Qwen3-8B
-        # =================================================
+# =====================================================
+# Call Qwen3-8B
+# =====================================================
 
-        try:
+try:
+
+    print(f"Sending request to {MODEL_NAME}...")
+    print(f"User said: {user_text}")
+
+    response = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=messages,
+        max_tokens=180,
+        temperature=0.7,
+        top_p=0.8,
+    )
+
+    print("========== LLM RAW RESPONSE ==========")
+    print(response)
+    print("=======================================")
+
+    if not response.choices:
+
+        print("LLM returned no choices")
+
+        ai_reply = (
+            "معلش 🌿، مش عارفة أرد عليكي دلوقتي. "
+            "ممكن تقوليلي تاني؟"
+        )
+
+    else:
+
+        message = response.choices[0].message
+
+        content = getattr(
+            message,
+            "content",
+            None
+        )
+
+        reasoning_content = getattr(
+            message,
+            "reasoning_content",
+            None
+        )
+
+        print(f"CONTENT: {repr(content)}")
+        print(f"REASONING CONTENT: {repr(reasoning_content)}")
+
+        if content is not None and str(content).strip():
+
+            ai_reply = str(content).strip()
+
+        else:
 
             print(
-                f"Sending request to {MODEL_NAME}..."
+                "The model did not return a final answer."
             )
 
-            print(
-                f"User said: {user_text}"
+            ai_reply = (
+                "معلش 🌿، ممكن تقوليلي تاني؟"
             )
 
+    print(f"AI Reply: {ai_reply}")
 
-            response = client.chat.completions.create(
 
-                model=MODEL_NAME,
+except Exception as e:
 
-                messages=messages,
+    print(f"LLM Error: {e}")
 
-                max_tokens=100,
-
-                temperature=0.7,
-
-                top_p=0.9,
-            )
-
+    ai_reply = (
+        "معلش 🌿، حصلت مشكلة صغيرة وأنا بحاول أفهمك. "
+        "ممكن تقوليلي تاني؟"
+    )
 
             # =================================================
             # Debug Raw Response
